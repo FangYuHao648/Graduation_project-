@@ -1,0 +1,8 @@
+path: "D:/\u684C\u9762/QrcodeDetection/datasets/Qrcode"
+train: datasets/Qrcode/images/train
+val: datasets/Qrcode/images/valid
+test: datasets/Qrcode/images/test/
+nc: 2
+names:
+  0: bar_code
+  1: qr_code
