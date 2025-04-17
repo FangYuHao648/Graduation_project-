@@ -16,12 +16,43 @@ from QtFusion.widgets import QMainWindow, QWindowCtrls, updateTable, replaceWidg
 
 from Recognition_UI import Ui_MainWindow
 from YOLOv6Model import YOLOv6Detector, count_classes
+from pyzbar import pyzbar
 
 
 class RecMainWindow(QMainWindow, Ui_MainWindow):
     def __init__(self, parent=None, *args, **kwargs):
         super(RecMainWindow, self).__init__(*args, **kwargs)
         self.setupUi(self)  # 从Ui_MainWindow中导入界面生成
+
+        # 添加全屏按钮
+        self.fullScreenButton = QtWidgets.QPushButton(self.centralwidget)
+        self.fullScreenButton.setObjectName("fullScreenButton")
+        self.fullScreenButton.setFixedSize(40, 40)
+        self.fullScreenButton.setStyleSheet("""
+            QPushButton {
+                background-color: transparent;
+                border-image: url(:/login/icons/fullscreen.png);
+                border: none;
+            }
+            QPushButton:hover {
+                background-color: rgba(200, 200, 200, 100);
+            }
+        """)
+        self.fullScreenButton.setToolTip("全屏显示")
+        self.fullScreenButton.clicked.connect(self.toggleFullScreen)
+        self.isFullScreen = False
+
+        # 将全屏按钮添加到标题栏
+        self.horizontalLayout_12.insertWidget(0, self.fullScreenButton)
+
+        # 保存原始窗口大小和比例
+        self.originalSize = self.size()
+        self.originalGeometry = {}
+        self.saveOriginalGeometry()
+
+        # 添加窗口大小追踪
+        self.originalSize = None
+        self.originalGeometry = {}
 
         # 设置界面最小化、退出等控制按钮及弹窗参数
         QWindowCtrls(self, exit_title="基于深度学习的二维码检测系统设计与实现",  # 退出确认框标题
@@ -436,7 +467,6 @@ class RecMainWindow(QMainWindow, Ui_MainWindow):
         self.label_display.setText('')  # 清空标签的显示文字
         self.total_frames = 1000  # 重置默认视频总帧数
         self.cur_frames = 0  # 重置当前帧
-        self.progressBar.setValue(0)  # 重置进度条
 
     def frame_process(self, image):
         """
@@ -496,14 +526,24 @@ class RecMainWindow(QMainWindow, Ui_MainWindow):
                     self.comboBox_select.addItem(text)  # 添加每个检测结果的选项
                 self.comboBox_select.currentIndexChanged.connect(self.toggle_comboBox)  # 重新连接下拉框的信号
 
-                for info in det_info:  # 遍历检测信息
+                for info in det_info:
                     name, bbox, conf, cls_id = info['class_name'], info['bbox'], info['score'], info['class_id']
                     label = '%s %.0f%%' % (name, conf * 100)
                     # 画出检测到的目标物
                     image = drawRectBox(image, bbox, alpha=0.2, addText=label, color=self.colors[cls_id])
 
-                    # 更新表格
-                    updateTable(self.tableWidget, self.id_tab, self.file_path, name, bbox, '%.2f' % conf)
+                    # 如果是二维码且置信度大于0.9，尝试解码
+                    display_name = name
+                    if name == '二维码' and conf > 0.9:
+                        x1, y1, x2, y2 = map(int, bbox)
+                        qr_roi = image[y1:y2, x1:x2]
+                        decoded_objs = pyzbar.decode(qr_roi)
+                        if decoded_objs:
+                            qr_content = decoded_objs[0].data.decode('utf-8')
+                            display_name = qr_content  # 结果列显示二维码内容
+
+                    # 更新表格，结果列为display_name
+                    updateTable(self.tableWidget, self.id_tab, self.file_path, display_name, bbox, '%.2f' % conf)
                     self.id_tab += 1
 
         self.dispImage(self.label_display, image)  # 在界面上显示图像
@@ -574,3 +614,37 @@ class RecMainWindow(QMainWindow, Ui_MainWindow):
         sender = self.sender()
         if sender:
             sender.setToolTip(str((value + 1) / 100))
+
+    def toggleFullScreen(self):
+        """切换全屏/窗口模式"""
+        if self.isFullScreen:
+            self.showNormal()
+            self.fullScreenButton.setToolTip("全屏显示")
+        else:
+            self.showFullScreen()
+            self.fullScreenButton.setToolTip("退出全屏")
+        self.isFullScreen = not self.isFullScreen
+        self.adjustControls()
+
+    def saveOriginalGeometry(self):
+        """保存所有控件的原始几何信息"""
+        for child in self.centralwidget.findChildren(QtWidgets.QWidget):
+            self.originalGeometry[child] = child.geometry()
+
+    def resizeEvent(self, event):
+        """窗口大小改变时调整控件比例"""
+        super().resizeEvent(event)
+        if self.isFullScreen:
+            self.adjustControls()
+
+    def adjustControls(self):
+        """根据窗口大小调整控件比例"""
+        scale_w = self.width() / self.originalSize.width()
+        scale_h = self.height() / self.originalSize.height()
+
+        for child, original_geo in self.originalGeometry.items():
+            new_x = int(original_geo.x() * scale_w)
+            new_y = int(original_geo.y() * scale_h)
+            new_w = int(original_geo.width() * scale_w)
+            new_h = int(original_geo.height() * scale_h)
+            child.setGeometry(new_x, new_y, new_w, new_h)

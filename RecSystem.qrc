@@ -28,6 +28,7 @@
     <file>icons/versions.png</file>
   </qresource>
   <qresource prefix="login">
+    <file>icons/fullscreen.png</file>
     <file>icons/logo1.png</file>
     <file>icons/bird-logo.png</file>
     <file>icons/check.png</file>
